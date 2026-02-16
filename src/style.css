@@ -43,6 +43,10 @@ body,
   background: #f8fafc;
 }
 
+.map-draw-mode .leaflet-container {
+  cursor: crosshair;
+}
+
 .leaflet-control-attribution {
   font-size: 10px;
   border: 2px solid currentcolor;
