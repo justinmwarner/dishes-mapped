@@ -3,6 +3,10 @@ import { CircleMarker, MapContainer, TileLayer, Tooltip } from 'react-leaflet'
 import type { LatLngExpression } from 'leaflet'
 import type { JSX } from 'react'
 import dishMapData from './data/DISH-MAP.json'
+import { Button } from './components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './components/ui/dialog'
+import { Link } from './components/ui/link'
+import { H2, Text } from './components/ui/typography'
 
 type DishItem = {
   Label: string
@@ -124,33 +128,46 @@ export default function App(): JSX.Element {
     return markerElements
   }
 
+  function renderDialogLinks(): JSX.Element[] {
+    const dishLinks: JSX.Element[] = []
+
+    if (!activeGroup) {
+      return dishLinks
+    }
+
+    for (const label of activeGroup.labels) {
+      dishLinks.push(
+        <li key={label} className="dish-list-item">
+          <Link href={buildWikipediaSearchUrl(label)} target="_blank" rel="noreferrer noopener">
+            {label}
+          </Link>
+        </li>,
+      )
+    }
+
+    return dishLinks
+  }
+
   function renderDialog(): JSX.Element | null {
     if (!activeGroup) {
       return null
     }
 
-    const dishLinks: JSX.Element[] = []
-
-    for (const label of activeGroup.labels) {
-      dishLinks.push(
-        <li key={label}>
-          <a href={buildWikipediaSearchUrl(label)} target="_blank" rel="noreferrer noopener">
-            {label}
-          </a>
-        </li>,
-      )
-    }
-
     return (
-      <dialog open className="group-dialog">
-        <header className="dialog-header">
-          <h2>{activeGroup.labels.length > 1 ? 'Dishes in this location' : 'Dish'}</h2>
-          <button type="button" onClick={handleCloseDialog}>
-            Close
-          </button>
-        </header>
-        <ul>{dishLinks}</ul>
-      </dialog>
+      <Dialog open className="group-dialog">
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              <H2>{activeGroup.labels.length > 1 ? 'Dishes in this location' : 'Dish'}</H2>
+            </DialogTitle>
+            <Button type="button" tone="ghost" onClick={handleCloseDialog}>
+              Close
+            </Button>
+          </DialogHeader>
+          <Text>Open a dish to search it on Wikipedia.</Text>
+          <ul className="dish-list">{renderDialogLinks()}</ul>
+        </DialogContent>
+      </Dialog>
     )
   }
 
