@@ -67,11 +67,11 @@ export function getThemeConfig(theme: ThemeName): ThemeConfig {
       mapClassName: 'map-theme-light',
       baseUrl: 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
       labelUrl: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png',
-      countryOutlineUrl: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lines/{z}/{x}/{y}.png',
+      countryOutlineUrl: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
       elevationUrl: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
       elevationOpacity: 0.26,
       attribution:
-        '&copy; OpenStreetMap contributors &copy; CARTO &copy; Stadia Maps &copy; OpenTopoMap',
+        '&copy; OpenStreetMap contributors &copy; CARTO &copy; OpenTopoMap',
     }
   }
 
@@ -79,11 +79,11 @@ export function getThemeConfig(theme: ThemeName): ThemeConfig {
     mapClassName: 'map-theme-dark',
     baseUrl: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
     labelUrl: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png',
-    countryOutlineUrl: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lines/{z}/{x}/{y}.png',
+    countryOutlineUrl: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     elevationUrl: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
     elevationOpacity: 0.22,
     attribution:
-      '&copy; OpenStreetMap contributors &copy; CARTO &copy; Stadia Maps &copy; OpenTopoMap',
+      '&copy; OpenStreetMap contributors &copy; CARTO &copy; OpenTopoMap',
   }
 }
 
