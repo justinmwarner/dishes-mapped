@@ -21,6 +21,8 @@ body,
 }
 
 .map {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
 }
@@ -43,6 +45,10 @@ body,
   background: #f8fafc;
 }
 
+.map-draw-mode .leaflet-container {
+  cursor: crosshair;
+}
+
 .leaflet-control-attribution {
   font-size: 10px;
   border: 2px solid currentcolor;
@@ -52,15 +58,17 @@ body,
 }
 
 .country-outline-layer {
-  filter: contrast(1.8) saturate(0) brightness(1.05);
+  filter: contrast(1.45) saturate(0) brightness(1.1);
 }
 
 .elevation-layer {
-  filter: contrast(1.25) saturate(0.8);
+  filter: contrast(1.2) saturate(0.78);
 }
 
 .city-label-layer {
-  filter: contrast(1.2) saturate(0.75);
+  filter: contrast(1.38) saturate(0.85) brightness(1.05);
+  transform: scale(1.06);
+  transform-origin: center center;
 }
 
 .ui-dialog {
@@ -132,11 +140,11 @@ body,
   font-size: 0.875rem;
 }
 
-.theme-panel {
+.theme-panel,
+.shape-panel {
   position: absolute;
-  top: 1rem;
   left: 1rem;
-  z-index: 600;
+  z-index: 1000;
   width: min(360px, calc(100% - 2rem));
   padding: 0.75rem 1rem 0.9rem;
   border: 3px solid currentcolor;
@@ -144,11 +152,43 @@ body,
   backdrop-filter: blur(4px);
 }
 
-.map-theme-dark .theme-panel {
-  background: rgba(2, 6, 23, 0.82);
+.theme-panel {
+  top: 1rem;
 }
 
-.theme-actions {
+.shape-panel {
+  top: 11.8rem;
+  max-height: min(48vh, 420px);
+  overflow: auto;
+}
+
+.map-theme-dark .theme-panel,
+.map-theme-dark .shape-panel {
+  background: rgba(2, 6, 23, 0.97);
+  color: #f8fafc;
+  border-color: rgba(148, 163, 184, 0.7);
+  box-shadow: 0 10px 28px rgba(2, 6, 23, 0.45);
+}
+
+.map-theme-dark .theme-panel .ui-text,
+.map-theme-dark .shape-panel .ui-text {
+  color: #f8fafc;
+}
+
+.map-theme-dark .shape-panel .ui-link {
+  color: #f8fafc;
+}
+
+.map-theme-dark .shape-panel .ui-link:hover {
+  color: #ffffff;
+}
+
+.map-theme-dark .shape-panel .dish-list-item {
+  border-bottom-color: rgba(148, 163, 184, 0.45);
+}
+
+.theme-actions,
+.shape-actions {
   display: flex;
   gap: 0.5rem;
   margin-top: 0.6rem;
@@ -161,6 +201,7 @@ body,
 
 .group-dialog {
   position: absolute;
+  z-index: 1100;
   top: 1rem;
   right: 1rem;
   width: min(420px, calc(100% - 2rem));
@@ -184,4 +225,14 @@ body,
 
 .dish-list-item:last-child {
   border-bottom: none;
+}
+
+.shape-list-empty .ui-text {
+  margin: 0.5rem 0 0;
+}
+
+
+.map-theme-dark .theme-button-active {
+  background: #f8fafc;
+  color: #0f172a;
 }
