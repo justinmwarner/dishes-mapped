@@ -52,15 +52,17 @@ body,
 }
 
 .country-outline-layer {
-  filter: contrast(1.8) saturate(0) brightness(1.05);
+  filter: contrast(1.45) saturate(0) brightness(1.1);
 }
 
 .elevation-layer {
-  filter: contrast(1.25) saturate(0.8);
+  filter: contrast(1.2) saturate(0.78);
 }
 
 .city-label-layer {
-  filter: contrast(1.2) saturate(0.75);
+  filter: contrast(1.38) saturate(0.85) brightness(1.05);
+  transform: scale(1.06);
+  transform-origin: center center;
 }
 
 .ui-dialog {
@@ -132,9 +134,9 @@ body,
   font-size: 0.875rem;
 }
 
-.theme-panel {
+.theme-panel,
+.shape-panel {
   position: absolute;
-  top: 1rem;
   left: 1rem;
   z-index: 600;
   width: min(360px, calc(100% - 2rem));
@@ -144,11 +146,23 @@ body,
   backdrop-filter: blur(4px);
 }
 
-.map-theme-dark .theme-panel {
+.theme-panel {
+  top: 1rem;
+}
+
+.shape-panel {
+  top: 11.8rem;
+  max-height: min(48vh, 420px);
+  overflow: auto;
+}
+
+.map-theme-dark .theme-panel,
+.map-theme-dark .shape-panel {
   background: rgba(2, 6, 23, 0.82);
 }
 
-.theme-actions {
+.theme-actions,
+.shape-actions {
   display: flex;
   gap: 0.5rem;
   margin-top: 0.6rem;
@@ -184,4 +198,8 @@ body,
 
 .dish-list-item:last-child {
   border-bottom: none;
+}
+
+.shape-list-empty .ui-text {
+  margin: 0.5rem 0 0;
 }

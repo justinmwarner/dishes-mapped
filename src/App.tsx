@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { MapContainer, TileLayer } from 'react-leaflet'
+import { useMemo, useState } from 'react'
+import { Circle, CircleMarker, MapContainer, TileLayer, Tooltip, useMapEvents } from 'react-leaflet'
 import type { LatLngExpression, PathOptions } from 'leaflet'
+import { latLng } from 'leaflet'
 import type { JSX } from 'react'
 import dishMapData from './data/DISH-MAP.json'
 import { ButtonComponent } from './components/ButtonComponent'
@@ -8,7 +9,6 @@ import { DialogComponent } from './components/DialogComponent'
 import { DialogContentComponent } from './components/DialogContentComponent'
 import { DialogHeaderComponent } from './components/DialogHeaderComponent'
 import { DialogTitleComponent } from './components/DialogTitleComponent'
-import { DishGroupMarkerComponent } from './components/DishGroupMarkerComponent'
 import { DishListComponent } from './components/DishListComponent'
 import { DishListItemComponent } from './components/DishListItemComponent'
 import { PageShellComponent } from './components/PageShellComponent'
@@ -39,6 +39,25 @@ type ThemeConfig = {
   elevationUrl: string
   elevationOpacity: number
   attribution: string
+}
+
+type ActiveSelection = {
+  id: string
+  title: string
+  labels: string[]
+}
+
+type DrawShape = {
+  center: [number, number]
+  radius: number
+}
+
+type ClusterPoint = {
+  id: string
+  center: [number, number]
+  labels: string[]
+  groupIds: string[]
+  count: number
 }
 
 const mapCenter: LatLngExpression = [20, 0]
@@ -81,17 +100,17 @@ function getMarkerStyle(theme: ThemeName, count: number): PathOptions {
   if (theme === 'brutalist-light') {
     return {
       color: '#0f172a',
-      weight: count > 1 ? 2.2 : 1.6,
+      weight: count > 1 ? 2.6 : 1.6,
       fillColor: '#0f172a',
-      fillOpacity: count > 1 ? 0.92 : 0.65,
+      fillOpacity: count > 1 ? 0.96 : 0.65,
     }
   }
 
   return {
     color: '#f8fafc',
-    weight: count > 1 ? 2.2 : 1.6,
+    weight: count > 1 ? 2.6 : 1.6,
     fillColor: '#f8fafc',
-    fillOpacity: count > 1 ? 0.92 : 0.65,
+    fillOpacity: count > 1 ? 0.96 : 0.65,
   }
 }
 
@@ -100,7 +119,7 @@ function getThemeConfig(theme: ThemeName): ThemeConfig {
     return {
       mapClassName: 'map-theme-light',
       baseUrl: 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
-      labelUrl: 'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png',
+      labelUrl: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png',
       countryOutlineUrl: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lines/{z}/{x}/{y}.png',
       elevationUrl: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
       elevationOpacity: 0.26,
@@ -112,7 +131,7 @@ function getThemeConfig(theme: ThemeName): ThemeConfig {
   return {
     mapClassName: 'map-theme-dark',
     baseUrl: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
-    labelUrl: 'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png',
+    labelUrl: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png',
     countryOutlineUrl: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lines/{z}/{x}/{y}.png',
     elevationUrl: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
     elevationOpacity: 0.22,
@@ -129,29 +148,199 @@ function getThemePanelTitle(theme: ThemeName): string {
   return 'Brutalist Dark'
 }
 
-function findGroupById(groupId: string): DishGroup | null {
-  for (const group of dishGroups) {
-    if (group.id === groupId) {
-      return group
+function computeClusters(groups: DishGroup[], zoom: number): ClusterPoint[] {
+  const clusterRadiusPx = Math.max(18, 54 - zoom * 3)
+  const clusters: Array<{
+    centerPoint: { x: number; y: number }
+    latTotal: number
+    lngTotal: number
+    labels: string[]
+    groupIds: string[]
+    count: number
+  }> = []
+
+  for (const group of groups) {
+    const [lat, lng] = group.location
+    const scale = 2 ** zoom
+    const x = ((lng + 180) / 360) * 256 * scale
+    const latRad = (lat * Math.PI) / 180
+    const mercatorY =
+      ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * 256 * scale
+
+    let joinedCluster = false
+
+    for (const cluster of clusters) {
+      const dx = x - cluster.centerPoint.x
+      const dy = mercatorY - cluster.centerPoint.y
+      const distance = Math.sqrt(dx * dx + dy * dy)
+
+      if (distance <= clusterRadiusPx) {
+        cluster.count += 1
+        cluster.latTotal += lat
+        cluster.lngTotal += lng
+        cluster.labels.push(...group.labels)
+        cluster.groupIds.push(group.id)
+        cluster.centerPoint.x = (cluster.centerPoint.x * (cluster.count - 1) + x) / cluster.count
+        cluster.centerPoint.y =
+          (cluster.centerPoint.y * (cluster.count - 1) + mercatorY) / cluster.count
+        joinedCluster = true
+        break
+      }
+    }
+
+    if (!joinedCluster) {
+      clusters.push({
+        centerPoint: { x, y: mercatorY },
+        latTotal: lat,
+        lngTotal: lng,
+        labels: [...group.labels],
+        groupIds: [group.id],
+        count: 1,
+      })
     }
   }
 
-  return null
+  return clusters.map((cluster, index) => ({
+    id: `cluster-${index}-${cluster.groupIds.join('|')}`,
+    center: [cluster.latTotal / cluster.count, cluster.lngTotal / cluster.count],
+    labels: cluster.labels,
+    groupIds: cluster.groupIds,
+    count: cluster.count,
+  }))
+}
+
+function ClusterLayerComponent(props: {
+  groups: DishGroup[]
+  theme: ThemeName
+  drawMode: boolean
+  shape: DrawShape | null
+  onShapeChange(shape: DrawShape | null): void
+  onMapCenterChange(center: [number, number]): void
+  onSelectCluster(selection: ActiveSelection): void
+}): JSX.Element {
+  const [zoom, setZoom] = useState<number>(2)
+  const [isDrawing, setIsDrawing] = useState(false)
+  const [drawCenter, setDrawCenter] = useState<[number, number] | null>(null)
+  const [draftRadius, setDraftRadius] = useState(0)
+
+  useMapEvents({
+    zoomend: event => {
+      setZoom(event.target.getZoom())
+    },
+    moveend: event => {
+      const center = event.target.getCenter()
+      props.onMapCenterChange([center.lat, center.lng])
+    },
+    mousedown: event => {
+      if (!props.drawMode) {
+        return
+      }
+
+      setIsDrawing(true)
+      setDrawCenter([event.latlng.lat, event.latlng.lng])
+      setDraftRadius(0)
+    },
+    mousemove: event => {
+      if (!props.drawMode || !isDrawing || !drawCenter) {
+        return
+      }
+
+      const centerPoint = latLng(drawCenter[0], drawCenter[1])
+      setDraftRadius(centerPoint.distanceTo(event.latlng))
+    },
+    mouseup: () => {
+      if (!props.drawMode || !isDrawing || !drawCenter) {
+        return
+      }
+
+      setIsDrawing(false)
+      if (draftRadius > 1000) {
+        props.onShapeChange({ center: drawCenter, radius: draftRadius })
+      } else {
+        props.onShapeChange(null)
+      }
+    },
+  })
+
+  const clusters = useMemo(() => computeClusters(props.groups, zoom), [props.groups, zoom])
+
+  function handleClickCluster(cluster: ClusterPoint): void {
+    const labels = [...cluster.labels].sort((left, right) => left.localeCompare(right))
+    props.onSelectCluster({
+      id: cluster.id,
+      title: cluster.count > 1 ? 'Dishes in this cluster' : 'Dish',
+      labels,
+    })
+  }
+
+  function renderCluster(cluster: ClusterPoint): JSX.Element {
+    return (
+      <CircleMarker
+        key={cluster.id}
+        center={cluster.center}
+        radius={cluster.count > 1 ? 8 + Math.min(cluster.count, 24) : 10}
+        pathOptions={getMarkerStyle(props.theme, cluster.count)}
+        eventHandlers={{ click: () => handleClickCluster(cluster) }}
+      >
+        <Tooltip direction="top" opacity={0.95}>
+          {cluster.count > 1
+            ? `${cluster.count} nearby locations · ${cluster.labels.length} dishes`
+            : cluster.labels[0]}
+        </Tooltip>
+      </CircleMarker>
+    )
+  }
+
+  const liveShape =
+    props.drawMode && isDrawing && drawCenter && draftRadius > 0
+      ? { center: drawCenter, radius: draftRadius }
+      : props.shape
+
+  return (
+    <>
+      {clusters.map(cluster => renderCluster(cluster))}
+      {liveShape ? <Circle center={liveShape.center} radius={liveShape.radius} pathOptions={{ color: '#0ea5e9', weight: 2, fillOpacity: 0.1 }} /> : null}
+    </>
+  )
 }
 
 export default function App(): JSX.Element {
-  const [activeGroupId, setActiveGroupId] = useState<string | null>(null)
+  const [activeSelection, setActiveSelection] = useState<ActiveSelection | null>(null)
   const [theme, setTheme] = useState<ThemeName>('brutalist-dark')
+  const [drawMode, setDrawMode] = useState(false)
+  const [shape, setShape] = useState<DrawShape | null>(null)
+  const [mapViewCenter, setMapViewCenter] = useState<[number, number]>([20, 0])
 
   const themeConfig = getThemeConfig(theme)
-  const activeGroup = activeGroupId ? findGroupById(activeGroupId) : null
+
+  const shapeItems = useMemo(() => {
+    if (!shape) {
+      return []
+    }
+
+    const centerPoint = latLng(shape.center[0], shape.center[1])
+    const viewportCenter = latLng(mapViewCenter[0], mapViewCenter[1])
+    const inside: Array<{ id: string; label: string; distanceFromViewCenter: number }> = []
+
+    for (const group of dishGroups) {
+      const location = latLng(group.location[0], group.location[1])
+      if (centerPoint.distanceTo(location) <= shape.radius) {
+        for (const label of group.labels) {
+          inside.push({
+            id: `${group.id}-${label}`,
+            label,
+            distanceFromViewCenter: viewportCenter.distanceTo(location),
+          })
+        }
+      }
+    }
+
+    inside.sort((left, right) => left.distanceFromViewCenter - right.distanceFromViewCenter)
+    return inside
+  }, [shape, mapViewCenter])
 
   function handleCloseDialog(): void {
-    setActiveGroupId(null)
-  }
-
-  function handleSelectGroup(groupId: string): void {
-    setActiveGroupId(groupId)
+    setActiveSelection(null)
   }
 
   function handleThemeDark(): void {
@@ -162,29 +351,12 @@ export default function App(): JSX.Element {
     setTheme('brutalist-light')
   }
 
-  function handleOpenPrimaryLink(label: string): void {
-    const url = buildWikipediaSearchUrl(label)
-    window.open(url, '_blank', 'noopener,noreferrer')
+  function handleToggleDrawMode(): void {
+    setDrawMode(current => !current)
   }
 
-  function renderMarkers(): JSX.Element[] {
-    const markerElements: JSX.Element[] = []
-
-    for (const group of dishGroups) {
-      markerElements.push(
-        <DishGroupMarkerComponent
-          key={group.id}
-          id={group.id}
-          location={group.location}
-          labels={group.labels}
-          markerStyle={getMarkerStyle(theme, group.labels.length)}
-          onSelectGroup={handleSelectGroup}
-          onOpenPrimaryLink={handleOpenPrimaryLink}
-        />,
-      )
-    }
-
-    return markerElements
+  function handleClearShape(): void {
+    setShape(null)
   }
 
   function renderThemeControls(): JSX.Element {
@@ -195,7 +367,7 @@ export default function App(): JSX.Element {
       <ThemePanelComponent>
         <DialogTitleComponent>{getThemePanelTitle(theme)}</DialogTitleComponent>
         <TextComponent>
-          City labels are visible. Borders and relief are layered for bold geography.
+          Country labels are cleaner, city labels are slightly larger, and markers now cluster.
         </TextComponent>
         <div className="theme-actions">
           <ButtonComponent
@@ -217,36 +389,67 @@ export default function App(): JSX.Element {
     )
   }
 
+  function renderSelectionPanel(): JSX.Element {
+    return (
+      <section className="shape-panel">
+        <DialogTitleComponent>Draw shape selection</DialogTitleComponent>
+        <TextComponent>
+          Toggle draw mode, then click and drag on the map to draw a circle. Items are sorted by
+          distance to your current map center.
+        </TextComponent>
+        <div className="shape-actions">
+          <ButtonComponent
+            type="button"
+            className={drawMode ? 'theme-button-active' : undefined}
+            onClick={handleToggleDrawMode}
+          >
+            {drawMode ? 'Drawing enabled' : 'Enable drawing'}
+          </ButtonComponent>
+          <ButtonComponent type="button" tone="ghost" onClick={handleClearShape}>
+            Clear shape
+          </ButtonComponent>
+        </div>
+        <DishListComponent>
+          {shapeItems.length === 0 ? (
+            <li className="dish-list-item shape-list-empty">
+              <TextComponent>
+                Draw a shape to list all dishes inside it.
+              </TextComponent>
+            </li>
+          ) : (
+            shapeItems.map(item => (
+              <DishListItemComponent
+                key={item.id}
+                label={`${item.label} · ${Math.round(item.distanceFromViewCenter / 1000)} km`}
+                url={buildWikipediaSearchUrl(item.label)}
+              />
+            ))
+          )}
+        </DishListComponent>
+      </section>
+    )
+  }
+
   function renderDialog(): JSX.Element | null {
-    if (!activeGroup) {
+    if (!activeSelection) {
       return null
-    }
-
-    const listItems: JSX.Element[] = []
-
-    for (const label of activeGroup.labels) {
-      listItems.push(
-        <DishListItemComponent
-          key={label}
-          label={label}
-          url={buildWikipediaSearchUrl(label)}
-        />,
-      )
     }
 
     return (
       <DialogComponent open className="group-dialog">
         <DialogContentComponent>
           <DialogHeaderComponent>
-            <DialogTitleComponent>
-              {activeGroup.labels.length > 1 ? 'Dishes in this location' : 'Dish'}
-            </DialogTitleComponent>
+            <DialogTitleComponent>{activeSelection.title}</DialogTitleComponent>
             <ButtonComponent type="button" tone="ghost" onClick={handleCloseDialog}>
               Close
             </ButtonComponent>
           </DialogHeaderComponent>
           <TextComponent>Open a dish to search it on Wikipedia.</TextComponent>
-          <DishListComponent>{listItems}</DishListComponent>
+          <DishListComponent>
+            {activeSelection.labels.map(label => (
+              <DishListItemComponent key={label} label={label} url={buildWikipediaSearchUrl(label)} />
+            ))}
+          </DishListComponent>
         </DialogContentComponent>
       </DialogComponent>
     )
@@ -255,6 +458,7 @@ export default function App(): JSX.Element {
   return (
     <PageShellComponent className={themeConfig.mapClassName}>
       {renderThemeControls()}
+      {renderSelectionPanel()}
       <MapContainer
         key={theme}
         center={mapCenter}
@@ -275,15 +479,23 @@ export default function App(): JSX.Element {
           attribution={themeConfig.attribution}
           className="country-outline-layer"
           url={themeConfig.countryOutlineUrl}
-          opacity={0.88}
+          opacity={0.82}
         />
         <TileLayer
           attribution={themeConfig.attribution}
           className="city-label-layer"
           url={themeConfig.labelUrl}
-          opacity={0.93}
+          opacity={0.97}
         />
-        {renderMarkers()}
+        <ClusterLayerComponent
+          groups={dishGroups}
+          theme={theme}
+          drawMode={drawMode}
+          shape={shape}
+          onShapeChange={setShape}
+          onMapCenterChange={setMapViewCenter}
+          onSelectCluster={setActiveSelection}
+        />
       </MapContainer>
       {renderDialog()}
     </PageShellComponent>
